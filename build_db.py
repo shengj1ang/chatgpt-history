@@ -51,9 +51,15 @@ def message_text(content: dict) -> str:
         for p in content.get("parts", []):
             if isinstance(p, str):
                 chunks.append(p)
-            elif isinstance(p, dict) and p.get("content_type") != "image_asset_pointer":
-                # Some nested text objects
-                chunks.append(p.get("text") or p.get("content") or "")
+            elif isinstance(p, dict):
+                if p.get("content_type") == "image_asset_pointer":
+                    ptr = p.get("asset_pointer", "")
+                    # Strip scheme and fragment: sediment://file_XXX#fragment → file_XXX
+                    file_id = ptr.replace("sediment://", "").split("#")[0]
+                    if file_id:
+                        chunks.append(f"![image](/source/{file_id})")
+                else:
+                    chunks.append(p.get("text") or p.get("content") or "")
         return "\n".join(c for c in chunks if c).strip()
 
     return ""

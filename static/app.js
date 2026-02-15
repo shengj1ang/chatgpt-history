@@ -22,6 +22,8 @@ const thread        = $('thread');
 const threadTitle   = $('thread-title');
 const threadMeta    = $('thread-meta');
 const messagesEl    = $('messages');
+const galleryPanel  = $('gallery');
+const galleryGrid   = $('gallery-grid');
 
 // ── Citation / artifact stripping ────────────────────────────────────────────
 // ChatGPT embeds inline citation markers that its UI renders as numbered
@@ -60,6 +62,9 @@ const md = (() => {
     s = s.replace(/\*([^*\n]+)\*/g,          '<em>$1</em>');
     s = s.replace(/_([^_\n]+)_/g,            '<em>$1</em>');
     s = s.replace(/~~(.+?)~~/g,              '<del>$1</del>');
+    // Images before links (![alt](src))
+    s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g,
+        (_, alt, src) => `<img src="${src}" alt="${esc(alt)}" loading="lazy">`);
     s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,
         (_, text, href) => `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${text}</a>`);
     return s;
@@ -266,8 +271,9 @@ async function openConversation(id, clickedEl) {
   state.activeId = id;
 
   // Show thread panel, clear previous content
-  emptyState.hidden = true;
-  thread.hidden     = false;
+  emptyState.hidden   = true;
+  galleryPanel.hidden = true;
+  thread.hidden       = false;
   messagesEl.innerHTML = '<div class="loading">Loading…</div>';
   threadTitle.textContent = '';
   threadMeta.textContent  = '';
@@ -359,6 +365,41 @@ document.addEventListener('keydown', e => {
     }
   }
 });
+
+// ── Gallery ───────────────────────────────────────────────────────────────────
+
+async function openGallery() {
+  // Deselect any active conversation
+  document.querySelectorAll('.conv-item.active').forEach(el => el.classList.remove('active'));
+  state.activeId = null;
+
+  emptyState.hidden  = true;
+  thread.hidden      = true;
+  galleryPanel.hidden = false;
+
+  if (galleryGrid.childElementCount > 0) return; // already loaded
+
+  galleryGrid.innerHTML = '<div class="loading">Loading…</div>';
+  const data = await fetch('/api/gallery').then(r => r.json());
+  galleryGrid.innerHTML = '';
+
+  if (!data.images?.length) {
+    galleryGrid.innerHTML = '<div class="no-results">No DALL-E images found in source/dalle-generations/</div>';
+    return;
+  }
+
+  for (const img of data.images) {
+    const a = document.createElement('a');
+    a.href   = img.url;
+    a.target = '_blank';
+    a.rel    = 'noopener noreferrer';
+    a.className = 'gallery-thumb';
+    a.innerHTML = `<img src="${img.url}" alt="${escHtml(img.filename)}" loading="lazy">`;
+    galleryGrid.appendChild(a);
+  }
+}
+
+$('gallery-btn').addEventListener('click', openGallery);
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 

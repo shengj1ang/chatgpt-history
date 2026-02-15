@@ -6,10 +6,14 @@ Routes
 ------
 GET /                          → static/index.html
 GET /static/<file>             → static/<file>
+GET /source/<file_id>          → image file from source/ directory
 GET /api/conversations         → JSON list (supports ?q=, ?limit=, ?offset=)
 GET /api/conversation/<id>     → JSON conversation + messages
+GET /api/gallery               → JSON list of DALL-E generation images
 """
 import json
+import mimetypes
+import re
 import sqlite3
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -17,6 +21,38 @@ from pathlib import Path
 
 STATIC = Path(__file__).parent / "static"
 MIME   = {".html": "text/html", ".js": "application/javascript", ".css": "text/css"}
+
+# ── Source file index ─────────────────────────────────────────────────────────
+# Maps file_id (from sediment:// asset pointers) → absolute Path
+
+_SOURCE_INDEX: dict[str, Path] = {}   # file_id → Path
+_GALLERY_IMAGES: list[dict]    = []   # DALL-E gallery entries
+
+
+def _build_source_index(source_dir: Path) -> None:
+    if not source_dir.exists():
+        return
+
+    # User-uploaded images: file_XXXX-sanitized.png → id is file_XXXX
+    for f in source_dir.iterdir():
+        if not f.is_file() or not f.name.startswith("file"):
+            continue
+        stem = f.stem
+        file_id = stem.split("-sanitized")[0] if "-sanitized" in stem else stem
+        _SOURCE_INDEX[file_id] = f
+
+    # DALL-E generations (standalone, not linked via sediment://)
+    dalle_dir = source_dir / "dalle-generations"
+    if dalle_dir.exists():
+        for f in sorted(dalle_dir.iterdir()):
+            if f.is_file() and f.suffix in (".webp", ".png", ".jpg", ".jpeg"):
+                _GALLERY_IMAGES.append({
+                    "filename": f.name,
+                    "url":      f"/source/__dalle/{f.name}",
+                })
+                _SOURCE_INDEX[f"__dalle/{f.name}"] = f
+
+    print(f"Source index: {len(_SOURCE_INDEX)} files, {len(_GALLERY_IMAGES)} gallery images")
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
@@ -55,10 +91,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def send_file(self, path: Path) -> None:
         data = path.read_bytes()
-        mime = MIME.get(path.suffix, "application/octet-stream")
+        mime = MIME.get(path.suffix) or mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        # Cache images for a day; never cache JS/CSS so changes are picked up immediately
+        cache = "max-age=86400" if path.suffix not in (".html", ".js", ".css") else "no-cache"
         self.send_response(200)
         self.send_header("Content-Type",   mime)
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control",  cache)
         self.end_headers()
         self.wfile.write(data)
 
@@ -73,13 +112,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_file(STATIC / "index.html")
 
         elif path.startswith("/static/"):
-            name = path[len("/static/"):]
-            # Prevent path traversal
+            name   = path[len("/static/"):]
             target = (STATIC / name).resolve()
             if target.is_relative_to(STATIC.resolve()) and target.is_file():
                 self.send_file(target)
             else:
                 self.send_error(404)
+
+        elif path.startswith("/source/"):
+            self._serve_source(urllib.parse.unquote(path[len("/source/"):]))
 
         elif path == "/api/conversations":
             self._api_list(qs)
@@ -88,6 +129,23 @@ class Handler(BaseHTTPRequestHandler):
             raw_id = path[len("/api/conversation/"):]
             self._api_detail(urllib.parse.unquote(raw_id))
 
+        elif path == "/api/gallery":
+            self.send_json({"images": _GALLERY_IMAGES})
+
+        else:
+            self.send_error(404)
+
+    # ── Source file serving ───────────────────────────────────────────────────
+
+    def _serve_source(self, file_id: str) -> None:
+        """Serve a file from the source index by its asset-pointer ID."""
+        # Allow only safe characters (alphanumeric, dash, underscore, dot, slash for __dalle/)
+        if not re.match(r'^[\w\-./]+$', file_id):
+            self.send_error(400)
+            return
+        f = _SOURCE_INDEX.get(file_id)
+        if f and f.exists():
+            self.send_file(f)
         else:
             self.send_error(404)
 
@@ -171,7 +229,9 @@ class Handler(BaseHTTPRequestHandler):
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 
-def serve(port: int = 8000, db_path: Path = Path("history.db")) -> None:
+def serve(port: int = 8000, db_path: Path = Path("history.db"),
+          source_dir: Path = Path("source")) -> None:
+    _build_source_index(source_dir)
     Handler.db_path = db_path
     httpd = HTTPServer(("127.0.0.1", port), Handler)
     try:
