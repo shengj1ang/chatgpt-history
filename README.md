@@ -4,6 +4,10 @@ Browse and full-text search your exported ChatGPT conversation history in a loca
 
 **No third-party packages required** — Python 3.9+ and SQLite only.
 
+![ChatGPT History Viewer](chatgpt-history.png)
+
+![DALL-E Gallery](dall-e-history.jpg)
+
 ---
 
 ## Setup
