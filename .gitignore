@@ -1,0 +1,6 @@
+.claude/
+source/
+history.db
+__pycache__/
+*.pyc
+.DS_Store

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChatGPT History</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="app">
+
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title">ChatGPT History</div>
+        <div class="search-wrap">
+          <svg class="search-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" stroke-width="1.5"/>
+            <line x1="13" y1="13" x2="17" y2="17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <input id="search" type="search" placeholder="Search conversations…" autocomplete="off" spellcheck="false">
+        </div>
+        <div id="result-count"></div>
+      </div>
+      <div id="conv-list"></div>
+      <div id="load-more-wrap" hidden>
+        <button id="load-more">Load more</button>
+      </div>
+    </aside>
+
+    <main id="main">
+      <div id="empty-state">
+        <div class="empty-inner">
+          <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <rect x="6" y="10" width="36" height="28" rx="4" stroke="currentColor" stroke-width="2"/>
+            <line x1="14" y1="18" x2="34" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="14" y1="24" x2="34" y2="24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="14" y1="30" x2="26" y2="30" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <p>Select a conversation to read it</p>
+          <p class="empty-hint">Press <kbd>/</kbd> to search · <kbd>↑</kbd><kbd>↓</kbd> to navigate</p>
+        </div>
+      </div>
+
+      <div id="thread" hidden>
+        <div class="thread-header">
+          <h2 id="thread-title"></h2>
+          <div id="thread-meta"></div>
+        </div>
+        <div id="messages"></div>
+      </div>
+    </main>
+
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
