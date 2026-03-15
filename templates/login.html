@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Sign in</title>
+
+<style>
+
+*{
+  box-sizing:border-box;
+}
+
+body{
+  margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:#212121;
+  color:#ececec;
+  height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.card{
+  width:340px;
+  padding:28px;
+  border-radius:14px;
+  background:#171717;
+  border:1px solid #303030;
+  box-shadow:0 10px 30px rgba(0,0,0,0.4);
+}
+
+h1{
+  margin:0 0 20px 0;
+  font-size:20px;
+  font-weight:600;
+}
+
+label{
+  font-size:13px;
+  opacity:.8;
+}
+
+input{
+  width:100%;
+  margin-top:6px;
+  margin-bottom:16px;
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px solid #303030;
+  background:#212121;
+  color:#ececec;
+  outline:none;
+  font-size:14px;
+}
+
+input:focus{
+  border-color:#10a37f;
+}
+
+button{
+  width:100%;
+  padding:11px;
+  border-radius:10px;
+  border:0;
+  background:#10a37f;
+  color:white;
+  font-size:14px;
+  font-weight:500;
+  cursor:pointer;
+}
+
+button:hover{
+  background:#0d8a6b;
+}
+
+.error{
+  margin-bottom:14px;
+  font-size:13px;
+  color:#ff6b6b;
+}
+
+.footer{
+  margin-top:14px;
+  font-size:12px;
+  opacity:.5;
+  text-align:center;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="card">
+
+<h1>Sign in</h1>
+
+{% if error %}
+<div class="error">{{error}}</div>
+{% endif %}
+
+<form method="post">
+
+<label>Username</label>
+<input name="username" autocomplete="username">
+
+<label>Password</label>
+<input name="password" type="password" autocomplete="current-password">
+
+<input type="hidden" name="next" value="{{next_url}}">
+
+<button type="submit">Continue</button>
+
+</form>
+
+<div class="footer">
+ChatGPT History Viewer
+</div>
+
+</div>
+
+</body>
+</html>

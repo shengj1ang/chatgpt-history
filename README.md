@@ -3,26 +3,53 @@
 Browse and full-text search your exported ChatGPT conversation history in a local web app.
 
 
-
 ## Changes in this fork
 
-This fork includes several small improvements to make the viewer easier to use with large ChatGPT export archives.
+This fork includes several improvements to make the viewer easier to use with large ChatGPT export archives and to simplify the server architecture.
 
-The message layout has been adjusted to look more like the ChatGPT interface. Conversations are now displayed in a bubble-style layout where user messages appear on the right and assistant messages appear on the left. This makes long threads easier to read compared to the original stacked layout.
+The original built-in `http.server` implementation has been replaced with a Flask application. This makes the server easier to maintain and extend while keeping the project lightweight and dependency-minimal.
 
-The conversation list loading was also adjusted so the UI can load more items at once (around 200 conversations per request). This improves navigation when browsing large histories with many conversations.
+A simple authentication system has also been added. When enabled, users must log in before accessing the viewer. The login uses a persistent session cookie so users do not need to log in again each time the browser is opened.
 
-Some fixes were made to media handling so exported images referenced in the conversations can be displayed correctly. The server now scans the export directory recursively to locate media files.
+Configuration has been moved to a dedicated `userconfig.py` file. This allows users to change settings such as the export directory, database path, port, debug mode, and authentication credentials without modifying the main application code.
+
+The message layout has also been adjusted to look more like the ChatGPT interface. Conversations are displayed in a bubble-style layout where user messages appear on the right and assistant messages appear on the left. This makes long threads easier to read compared to the original stacked layout.
+
+The conversation list loading was adjusted so the UI can load more items at once (around 200 conversations per request). This improves navigation when browsing large histories with many conversations.
+
+Media handling has been improved so exported images referenced in conversations can be displayed correctly. The server now scans the export directory recursively to locate media files.
 
 In addition, `build_db.py` was updated to support importing conversations from multiple export folders and split files such as `conversations-000.json` and `conversations-001.json`. This allows large archives or exports from multiple accounts to be merged into a single `history.db` database.
+
+### Configuration
+
+Server settings and authentication credentials are stored in `userconfig.py`.
+
+```
+from pathlib import Path
+
+DB_PATH = Path(“history.db”)
+SOURCE = Path(“exports”)
+PORT = 8000
+debug = False
+
+AUTH_ENABLED = True
+AUTH_USERNAME = “admin”
+AUTH_PASSWORD = “password”
+SECRET_KEY = “change_this_to_a_random_secret”
+```
+
+Users only need to edit this file to change server settings or enable/disable authentication.
 
 ### Example directory structure
 
 A typical setup may look like this:
 ```
+
 chatgpt-history-viewer/
+├── app.py
 ├── build_db.py
-├── server.py
+├── userconfig.py
 ├── history.db
 ├── exports/
 │   ├── account_1/
@@ -33,13 +60,15 @@ chatgpt-history-viewer/
 │   │   ├── conversations-000.json
 │   │   ├── conversations-001.json
 │   │   └── file_00000003.png
-├── static/
+├── templates/
 │   ├── index.html
-│   ├── style.css
-│   └── app.js
+│   └── login.html
+└── static/
+├── app.js
+└── style.css
 ```
-The `build_db.py` script scans the `exports/` directory recursively and imports all conversation files it finds. The server also indexes media files from the same directory so images referenced in the conversations can be served correctly.
 
+The `build_db.py` script scans the `exports/` directory recursively and imports all conversation files it finds. The server also indexes media files from the same directory so images referenced in the conversations can be served correctly.
 
 **No third-party packages required** — Python 3.9+ and SQLite only.
 
