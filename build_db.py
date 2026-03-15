@@ -12,9 +12,11 @@ Can also be run directly:
     python3 build_db.py [--source source/conversations.json] [--db history.db]
 """
 import json
+import re
 import sqlite3
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
 # ── Content-type handling ──────────────────────────────────────────────────────
 
@@ -31,6 +33,23 @@ SKIP_CONTENT_TYPES = frozenset({
     "code",           # tool invocation JSON (search, browser, etc.) — not user-facing
 })
 
+def rewrite_sandbox_links(text: str, name_to_id: dict | None = None) -> str:
+    """
+    Rewrite sandbox:/mnt/data/<filename> links.
+    If name_to_id is provided, rewrite to /source/<attachment_id>.
+    Otherwise fall back to /source/<filename>.
+    """
+    name_to_id = name_to_id or {}
+
+    def repl(m):
+        raw = m.group(1).strip()
+        filename = raw.split("?", 1)[0]  # 去掉 ?_chatgptios_xxx 这种参数
+        file_id = name_to_id.get(filename)
+        if file_id:
+            return f"/source/{quote(file_id)}"
+        return f"/source/{quote(filename)}"
+
+    return re.sub(r'sandbox:/mnt/data/([^)]+)', repl, text)
 
 def message_text(content: dict) -> str:
     """Return displayable markdown text from a message content dict."""
@@ -38,16 +57,28 @@ def message_text(content: dict) -> str:
 
     if ct == "text":
         parts = content.get("parts", [])
-        return "\n".join(p for p in parts if isinstance(p, str)).strip()
+        return rewrite_sandbox_links(
+            "\n".join(p for p in parts if isinstance(p, str)).strip()
+        )
 
     if ct == "code":
         # Code interpreter / tool output — stored in content["text"] directly
         body = (content.get("text") or "").strip()
         lang = (content.get("language") or "").strip()
-        return f"```{lang}\n{body}\n```" if body else ""
+        return rewrite_sandbox_links(
+            f"```{lang}\n{body}\n```" if body else ""
+        )
 
     if ct == "multimodal_text":
         chunks = []
+
+        attachments = (content.get("metadata") or {}).get("attachments", [])
+        name_to_id = {
+            att.get("name"): att.get("id")
+            for att in attachments
+            if att.get("name") and att.get("id")
+        }
+
         for p in content.get("parts", []):
             if isinstance(p, str):
                 chunks.append(p)
@@ -59,7 +90,10 @@ def message_text(content: dict) -> str:
                     if file_id:
                         chunks.append(f"![image](/source/{file_id})")
                 else:
-                    chunks.append(p.get("text") or p.get("content") or "")
+                    text = p.get("text") or p.get("content") or ""
+                    if text:
+                        chunks.append(rewrite_sandbox_links(text, name_to_id))
+
         return "\n".join(c for c in chunks if c).strip()
 
     return ""
@@ -95,7 +129,7 @@ def parse_conversation(conv: dict):
     Returns (meta_dict, message_list) or (None, []) when the
     conversation has no usable messages.
     """
-    cid = conv.get("id") or conv.get("conversation_id")
+    cid = f"{conv.get('id') or conv.get('conversation_id')}_{conv.get('create_time',0)}"
     if not cid:
         return None, []
 
@@ -104,7 +138,7 @@ def parse_conversation(conv: dict):
     if not current_node:
         return None, []
 
-    thread = extract_thread(mapping, current_node)
+    thread = list(reversed(extract_thread(mapping, current_node)))
 
     msgs = []
     for seq, msg in enumerate(thread):
@@ -182,35 +216,44 @@ CREATE VIRTUAL TABLE search_index USING fts5(
 
 
 def build(source: Path, db_path: Path) -> None:
-    print(f"Loading {source} …", flush=True)
-    with open(source, encoding="utf-8") as f:
-        data = json.load(f)
+    # 支持目录 + conversations-xxx.json
+    if source.is_dir():
+        files = list(source.rglob("conversations*.json"))
+        files.sort(key=lambda p: (p.parent.name, p.name))
+    else:
+        files = [source]
 
-    total = len(data)
-    print(f"{total} conversations found. Indexing…", flush=True)
+    print(f"Found {len(files)} conversation files", flush=True)
 
+    conv_rows, msg_rows, fts_rows = [], [], []
+    total = 0
+
+    for file in files:
+        print(f"Loading {file} …", flush=True)
+
+        with open(file, encoding="utf-8") as f:
+            data = json.load(f)
+
+        total += len(data)
+
+        for conv in data:
+            meta, msgs = parse_conversation(conv)
+            if meta is None:
+                continue
+
+            conv_rows.append(meta)
+            msg_rows.extend(msgs)
+            fts_rows.append((
+                meta["id"],
+                meta["title"],
+                "\n".join(m["content"] for m in msgs),
+            ))
+
+    print(f"{total} conversations loaded", flush=True)
     db = sqlite3.connect(db_path)
     db.executescript(SCHEMA)
 
-    conv_rows, msg_rows, fts_rows = [], [], []
-
-    for i, conv in enumerate(data):
-        if i % 100 == 0:
-            sys.stderr.write(f"\r  {i:>5}/{total}")
-            sys.stderr.flush()
-
-        meta, msgs = parse_conversation(conv)
-        if meta is None:
-            continue
-
-        conv_rows.append(meta)
-        msg_rows.extend(msgs)
-        fts_rows.append((
-            meta["id"],
-            meta["title"],
-            "\n".join(m["content"] for m in msgs),
-        ))
-
+    
     sys.stderr.write(f"\r  {total}/{total}\n")
 
     db.executemany(
@@ -234,7 +277,7 @@ if __name__ == "__main__":
     import argparse
 
     ap = argparse.ArgumentParser(description="Build ChatGPT history search database")
-    ap.add_argument("--source", default="source/conversations.json",
+    ap.add_argument("--source", default="exports",
                     help="Path to conversations.json  (default: source/conversations.json)")
     ap.add_argument("--db",     default="history.db",
                     help="Output SQLite database path  (default: history.db)")

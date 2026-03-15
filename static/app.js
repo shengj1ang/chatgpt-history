@@ -177,21 +177,16 @@ function escHtml(s) {
 
 function formatDate(ts) {
   if (!ts) return '';
-  const d       = new Date(ts * 1000);
-  const now     = new Date();
-  const diffMs  = now - d;
-  const diffDays = diffMs / 86_400_000;
-
-  if (diffDays < 1)   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (diffDays < 7)   return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-  if (diffDays < 365) return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-  return d.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+  const d = new Date(ts * 1000);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}- ${hh}:${mm}`;
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────
 
 async function apiConversations(q, offset) {
-  const p = new URLSearchParams({ limit: 50, offset });
+  const p = new URLSearchParams({ limit: 200, offset });
   if (q) p.set('q', q);
   const r = await fetch(`/api/conversations?${p}`);
   return r.json();

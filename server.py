@@ -16,6 +16,7 @@ import mimetypes
 import re
 import sqlite3
 import urllib.parse
+import html
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -34,12 +35,10 @@ def _build_source_index(source_dir: Path) -> None:
         return
 
     # User-uploaded images: file_XXXX-sanitized.png → id is file_XXXX
-    for f in source_dir.iterdir():
+    for f in source_dir.rglob("*"):
         if not f.is_file() or not f.name.startswith("file"):
             continue
-        stem = f.stem
-        file_id = stem.split("-sanitized")[0] if "-sanitized" in stem else stem
-        _SOURCE_INDEX[file_id] = f
+        _SOURCE_INDEX[f.name] = f
 
     # DALL-E generations (standalone, not linked via sediment://)
     dalle_dir = source_dir / "dalle-generations"
@@ -143,17 +142,40 @@ class Handler(BaseHTTPRequestHandler):
         if not re.match(r'^[\w\-./]+$', file_id):
             self.send_error(400)
             return
+        # 先尝试完全匹配
         f = _SOURCE_INDEX.get(file_id)
         if f and f.exists():
             self.send_file(f)
-        else:
-            self.send_error(404)
+            return
+
+        # 再找“以 id 开头”的文件
+                # 再找“以 id 开头”的文件
+        for name, path in _SOURCE_INDEX.items():
+            if name.startswith(file_id):
+                if path.exists():
+                    self.send_file(path)
+                    return
+
+        # 如果链接里混进了 <em>...</em>，把它还原成空格后再模糊查找
+        fuzzy_id = file_id
+        fuzzy_id = re.sub(r'</?em>', ' ', fuzzy_id, flags=re.IGNORECASE)
+        fuzzy_id = html.unescape(fuzzy_id)
+        fuzzy_id = re.sub(r'\s+', ' ', fuzzy_id).strip()
+
+        for name, path in _SOURCE_INDEX.items():
+            candidate = html.unescape(name)
+            if fuzzy_id in candidate and path.exists():
+                self.send_file(path)
+                return
+
+        self.send_error(404)
+
 
     # ── API: conversation list / search ───────────────────────────────────────
 
     def _api_list(self, qs: dict) -> None:
         q      = qs.get("q", "").strip()
-        limit  = min(int(qs.get("limit",  50)), 200)
+        limit  = min(int(qs.get("limit",  200)), 1000)
         offset = max(int(qs.get("offset",  0)),   0)
 
         conn = open_db(self.db_path)
@@ -214,7 +236,7 @@ class Handler(BaseHTTPRequestHandler):
 
             msgs = conn.execute(
                 "SELECT role, content, create_time FROM messages "
-                "WHERE conversation_id = ? ORDER BY seq",
+                "WHERE conversation_id = ? ORDER BY seq DESC",
                 (conv_id,),
             ).fetchall()
 
@@ -230,7 +252,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(port: int = 8000, db_path: Path = Path("history.db"),
-          source_dir: Path = Path("source")) -> None:
+          source_dir: Path = Path("exports")) -> None:
     _build_source_index(source_dir)
     Handler.db_path = db_path
     httpd = HTTPServer(("127.0.0.1", port), Handler)

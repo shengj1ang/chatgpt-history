@@ -14,11 +14,12 @@ import webbrowser
 from pathlib import Path
 
 DB_PATH = Path("history.db")
-SOURCE  = Path("source") / "conversations.json"
+SOURCE  = Path("exports")
 PORT    = 8000
 
 
 def main() -> None:
+
     if not SOURCE.exists():
         print(f"Error: {SOURCE} not found.")
         print("Export your ChatGPT history and place conversations.json in source/")

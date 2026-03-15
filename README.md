@@ -2,6 +2,45 @@
 
 Browse and full-text search your exported ChatGPT conversation history in a local web app.
 
+
+
+## Changes in this fork
+
+This fork includes several small improvements to make the viewer easier to use with large ChatGPT export archives.
+
+The message layout has been adjusted to look more like the ChatGPT interface. Conversations are now displayed in a bubble-style layout where user messages appear on the right and assistant messages appear on the left. This makes long threads easier to read compared to the original stacked layout.
+
+The conversation list loading was also adjusted so the UI can load more items at once (around 200 conversations per request). This improves navigation when browsing large histories with many conversations.
+
+Some fixes were made to media handling so exported images referenced in the conversations can be displayed correctly. The server now scans the export directory recursively to locate media files.
+
+In addition, `build_db.py` was updated to support importing conversations from multiple export folders and split files such as `conversations-000.json` and `conversations-001.json`. This allows large archives or exports from multiple accounts to be merged into a single `history.db` database.
+
+### Example directory structure
+
+A typical setup may look like this:
+```
+chatgpt-history-viewer/
+├── build_db.py
+├── server.py
+├── history.db
+├── exports/
+│   ├── account_1/
+│   │   ├── conversations.json
+│   │   ├── file_00000001.png
+│   │   └── file_00000002.pdf
+│   ├── account_2/
+│   │   ├── conversations-000.json
+│   │   ├── conversations-001.json
+│   │   └── file_00000003.png
+├── static/
+│   ├── index.html
+│   ├── style.css
+│   └── app.js
+```
+The `build_db.py` script scans the `exports/` directory recursively and imports all conversation files it finds. The server also indexes media files from the same directory so images referenced in the conversations can be served correctly.
+
+
 **No third-party packages required** — Python 3.9+ and SQLite only.
 
 ![ChatGPT History Viewer](chatgpt-history.png)
